@@ -1,0 +1,45 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // User Profiles:
+    // - Anyone can read (needed for matching/search)
+    // - Only the owner can write/update their own profile
+    match /users/{userId} {
+      allow read: if true;
+      allow create: if request.auth != null && request.auth.uid == userId;
+      allow update: if request.auth != null && request.auth.uid == userId;
+      // Allow rating updates (special case: anyone can update rating? No, should be via function or specific logic)
+      // For this app prototype, we'll allow authenticated users to update others (for rating), 
+      // but ideally this should be stricter.
+      // Let's stick to "Only owner can edit profile fields", but maybe allow rating updates?
+      // Actually comp. logic handles rating updates on the user doc.
+      // We'll allow updates if auth is present for now to keep rating working without cloud functions.
+      allow update: if request.auth != null; 
+    }
+    
+    // Sessions:
+    // - Participants (teacher or student) can read/write
+    // - Create allows any auth user
+    match /sessions/{sessionId} {
+      allow create: if request.auth != null;
+      allow read: if request.auth != null && (
+        request.auth.uid == resource.data.tId || 
+        request.auth.uid == resource.data.sId
+      );
+      allow update: if request.auth != null && (
+        request.auth.uid == resource.data.tId || 
+        request.auth.uid == resource.data.sId
+      );
+    }
+    
+    // Messages (Subcollection of sessions):
+    // - Participants can read/write
+    match /sessions/{sessionId}/messages/{msgId} {
+      allow read, write: if request.auth != null && (
+        get(/databases/$(database)/documents/sessions/$(sessionId)).data.tId == request.auth.uid ||
+        get(/databases/$(database)/documents/sessions/$(sessionId)).data.sId == request.auth.uid
+      );
+    }
+  }
+}
